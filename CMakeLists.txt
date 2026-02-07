@@ -18,7 +18,7 @@ configure_file(version.h.in version.h)
 # Targets
 # -------------------------
 add_executable(${PROJECT_NAME_VAR}_cli main.cpp)
-add_library(${PROJECT_NAME_VAR} lib.cpp src/MyMapAllocator.hpp)
+add_library(${PROJECT_NAME_VAR} lib.cpp src/MyMapAllocator.hpp src/Arena.h src/Arena.cpp)
 
 set_target_properties(${PROJECT_NAME_VAR}_cli ${PROJECT_NAME_VAR} PROPERTIES
     CXX_STANDARD 20

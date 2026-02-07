@@ -1,6 +1,7 @@
 #include "lib.h"
 
 #include <iostream>
+#include <memory>
 #include "src/MyMapAllocator.hpp"
 
 struct alignas(64) OverAligned {
@@ -12,7 +13,9 @@ int main()
     using value = OverAligned;
     std::cout << "Version: " << version() << std::endl;
 
-    MyMapAllocator<std::pair<const int, value>> alloc(1000000);
+    auto a = std::make_shared<Arena>(4096);
+
+    MyMapAllocator<std::pair<const int, value>> alloc(a);
 
     std::map<
             int,
@@ -21,19 +24,16 @@ int main()
             MyMapAllocator<std::pair<const int, value>>
     > m(std::less<int>{}, alloc);
 
-
     try{
-        for(int i = 0; i < 100; i++)
+        for(int i = 0; i < 10000; i++)
         {
             m[i] = value();
-            std::cout << "used " << i << " - " <<alloc.pool_->used << std::endl;
+            std::cout << i << std::endl;
         }
     } catch (std::exception& e)
     {
         std::cout << e.what() << std::endl;
     }
-
-
 
     return 0;
 }
