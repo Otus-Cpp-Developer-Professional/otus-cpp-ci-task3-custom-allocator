@@ -36,7 +36,11 @@ public:
     explicit MyMapAllocator(size_t capacity);
     ~MyMapAllocator();
     T* allocate(size_t n);
-    void deallocate(T* p, std::size_t n) noexcept {};
+
+    void deallocate([[maybe_unused]] T* p,
+                    [[maybe_unused]] std::size_t n) noexcept
+    {}
+
 };
 
 
