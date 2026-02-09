@@ -1,4 +1,4 @@
-name: 'C++ CI'
+name: C++ CI
 
 permissions:
   contents: write
@@ -9,28 +9,64 @@ on:
       - main
       - master
       - feature/github_actions
+    workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v2
-        with:
-          submodules: true
-      - run: sudo apt-get update && sudo apt-get install libboost-test-dev -y
-      - run: cmake . -DPATCH_VERSION=${{ github.run_number }} -DWITH_BOOST_TEST=ON
-      - run: cmake --build .
-      - run: cmake --build . --target test
-      - run: cmake --build . --target package
-      - name: Install Doxygen
-        run: sudo apt-get update && sudo apt-get install -y doxygen
-      - name: Generate Doxygen
-        run: doxygen Doxyfile
-      - name: Deploy to gh-pages
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libboost-test-dev \
+            doxygen
+
+      - name: Configure project
+        run: |
+          cmake -S . -B build \
+            -DPATCH_VERSION=${{ github.run_number }} \
+            -DWITH_BOOST_TEST=ON
+
+      - name: Build project
+        run: |
+          cmake --build build
+
+      - name: Run tests
+        run: |
+          ctest --test-dir build --output-on-failure
+
+      - name: Build deb package
+        run: |
+          cmake --build build --target package
+
+      - name: Debug deb files
+        run: |
+          echo "=== build directory ==="
+          ls -lah build
+
+      - name: Find deb package
+        run: |
+          DEB_PATH="$(find build -name '*.deb' | head -n 1)"
+          echo "DEB_PATH=$DEB_PATH" >> $GITHUB_ENV
+          echo "Found deb: $DEB_PATH"
+
+      - name: Generate Doxygen documentation
+        run: |
+          doxygen Doxyfile
+
+      - name: Deploy Doxygen to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./html
+          publish_branch: gh-pages
+          publish_dir: docs/html
+          force_orphan: true
+
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
@@ -41,13 +77,13 @@ jobs:
           release_name: Release ${{ github.run_number }}
           draft: false
           prerelease: false
-      - name: Upload Release Asset
-        id: upload-release-asset
+
+      - name: Upload deb package
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./custom_allocator-0.0.${{ github.run_number }}-Linux.deb
-          asset_name: custom_allocator-0.0.${{ github.run_number }}-Linux.deb
+          asset_path: ${{ env.DEB_PATH }}
+          asset_name: allocator-${{ github.run_number }}.deb
           asset_content_type: application/vnd.debian.binary-package
