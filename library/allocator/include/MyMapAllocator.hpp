@@ -1,94 +1,140 @@
-//
-// Created by Sg on 07.02.2026.
-//
-
 #pragma once
 
-#include <map>
 #include <cstddef>
-#include <new>
 #include <memory>
-#include <vector>
+#include <new>
+#include <type_traits>
 
 #include "detail/Arena.hpp"
+
+namespace my_allocator::policy
+{
+    // Allocation policy: fixed number of elements (no expansion)
+    struct FixedCapacity {};
+
+    // Allocation policy: expandable arena
+    struct ExpandableCapacity {};
+}
+
+
+
 /**
- * @brief Simple arena-based allocator for STL containers
+ * @brief STL-compatible allocator with optional fixed or expandable capacity
  *
  * MyMapAllocator is a stateful allocator that allocates memory from
- * a private memory arena. The arena is created inside the allocator
- * and owns all allocated memory for the allocator's lifetime.
+ * an internal byte-based arena. The allocator itself operates in terms
+ * of elements, as required by the STL allocator interface.
  *
- * This allocator:
- * - supports allocation of contiguous memory blocks
- * - respects alignment requirements (alignof(T))
- * - does not support deallocation of individual objects
+ * Two allocation modes are supported:
  *
- * Memory is released only when the allocator (and its arena) is destroyed.
- * This design is suitable for containers with monotonic allocation patterns
- * (e.g. std::map built once and destroyed as a whole).
+ * 1. FixedCapacity (default)
+ *    - allocator is parameterized by the maximum number of elements
+ *    - allocation beyond this limit results in std::bad_alloc
+ *    - arena does NOT grow
  *
- * @tparam T Type of objects to allocate
+ * 2. ExpandableCapacity
+ *    - allocator may expand the arena when capacity is exceeded
+ *    - element limit is relaxed
  *
- * @note deallocate() is intentionally a no-op
+ * The allocator does NOT support individual deallocation.
+ * All memory is released when the allocator (and its arena) is destroyed.
+ *
+ * @tparam T Value type to allocate
+ * @tparam CapacityPolicy Allocation growth policy
+ *
  * @note This allocator is not thread-safe
+ * @note deallocate() is intentionally a no-op
  */
-template<class T>
-struct MyMapAllocator
+template<
+        typename T,
+        typename CapacityPolicy = my_allocator::policy::FixedCapacity
+>
+class MyMapAllocator
 {
+public:
     using value_type = T;
 
-    /// Shared ownership of the underlying memory arena
-    std::shared_ptr<my_allocator::detail::Arena> arena_;
+private:
+    using Arena = my_allocator::detail::Arena;
 
-    /// Default constructor is disabled: arena size must be specified
+    std::shared_ptr<Arena> arena_;
+
+    std::size_t max_elements_ = 0;     // logical capacity in elements
+    std::size_t allocated_    = 0;     // allocated elements count
+
+public:
+    /// Default constructor is disabled: capacity must be specified
     MyMapAllocator() = delete;
 
     /**
-     * @brief Constructs allocator with a new memory arena
+     * @brief Constructs allocator with fixed element capacity
      *
-     * @param arena_bytes Size of the arena in bytes
+     * This constructor is intended for FixedCapacity mode.
+     * The arena size is computed as max_elements * sizeof(T).
+     *
+     * @param max_elements Maximum number of elements that can be allocated
      */
-    explicit MyMapAllocator(size_t arena_bytes)
+    explicit MyMapAllocator(std::size_t max_elements)
+            : max_elements_(max_elements)
     {
-        arena_ = std::make_shared<my_allocator::detail::Arena>(arena_bytes);
+        const std::size_t arena_bytes = max_elements * sizeof(T);
+        arena_ = std::make_shared<Arena>(arena_bytes);
     }
 
     /**
-     * @brief Copy-construct allocator from another allocator of different type
+     * @brief Copy constructor from allocator of another value type
      *
-     * Copies the underlying arena pointer.
-     * Required for STL allocator compatibility.
-     *
-     * @tparam U Allocated type of the source allocator
-     * @param other Source allocator
+     * Required for STL allocator compatibility (rebind).
+     * Shares the same underlying arena and allocation state.
      */
-    template<class U>
-    explicit MyMapAllocator(const MyMapAllocator<U>& other) noexcept
-            : arena_(other.arena_) {}
+
+    template<typename U>
+    explicit MyMapAllocator(const MyMapAllocator<U, CapacityPolicy>& other) noexcept
+            : arena_(other.arena_)
+            , max_elements_(other.max_elements_)
+            , allocated_(other.allocated_)
+    {}
 
     /**
-     * @brief Allocates memory for n objects of type T
+     * @brief Allocates memory for n elements of type T
      *
-     * @param n Number of objects
+     * @param n Number of elements
      * @return Pointer to allocated memory
      *
-     * @throws std::bad_alloc if the arena cannot satisfy the request
+     * @throws std::bad_alloc if capacity is exceeded (FixedCapacity)
      */
     T* allocate(std::size_t n)
     {
-        return static_cast<T*>(
-                arena_->allocate_bytes(n * sizeof(T), alignof(T))
+        // Enforce element limit in fixed-capacity mode
+        using namespace my_allocator::policy;
+
+        if constexpr (std::is_same_v<CapacityPolicy, FixedCapacity>)
+        {
+            if (allocated_ + n > max_elements_)
+                throw std::bad_alloc{};
+        }
+
+        void* ptr = arena_->allocate_bytes(
+                n * sizeof(T),
+                alignof(T)
         );
+
+        allocated_ += n;
+        return static_cast<T*>(ptr);
     }
 
     /**
      * @brief Deallocation function (no-op)
      *
-     * This allocator does not support individual deallocation.
-     * Memory is reclaimed only when the arena is destroyed.
-     *
-     * @param Pointer previously returned by allocate (ignored)
-     * @param Number of objects (ignored)
+     * Individual deallocation is intentionally not supported.
+     * Memory is reclaimed only when the allocator is destroyed.
      */
-    void deallocate(T*, std::size_t) noexcept {}
+    void deallocate(T*, std::size_t) noexcept
+    {
+        // no-op
+    }
+
+    // Required for allocator equality comparison in STL
+    template<typename U, typename P>
+    friend class MyMapAllocator;
 };

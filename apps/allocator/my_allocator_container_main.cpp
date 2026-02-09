@@ -1,63 +1,83 @@
-
 #include <iostream>
-#include <string>
+#include <map>
 
 #include <MyMapAllocator.hpp>
 #include <MyContainer.hpp>
 
-struct OverAligned {
-
-    std::uint64_t i;
-
-    [[nodiscard]] std::string getI() const { return std::to_string(i);}
-
-    explicit OverAligned(std::uint64_t _i) : i(_i){};
-    OverAligned() = default;
-};
+int factorial(int n)
+{
+    int result = 1;
+    for (int i = 1; i <= n; ++i)
+        result *= i;
+    return result;
+}
 
 int main()
 {
-    using value = OverAligned;
 
-    MyMapAllocator<std::pair<const int, value>> alloc(4096);
+    std::map<int, int> default_map;
 
-    MyMapAllocator<int> alloc2(4096);
+    for (int i = 0; i < 10; ++i)
+        default_map.emplace(i, factorial(i));
 
-    MyContainer<OverAligned, decltype(alloc2)> cc{alloc2};
+    std::cout << "std::map with default allocator:\n";
+    for (const auto& [key, value] : default_map)
+        std::cout << key << " " << value << '\n';
+
+    std::cout << '\n';
+
+    using MapAllocator =
+            MyMapAllocator<
+                    std::pair<const int, int>,
+                    my_allocator::policy::FixedCapacity
+            >;
+    // We need extra capacity for internal map allocations
+    MapAllocator map_alloc(16); //not 10
+
+    std::map<int, int, std::less<int>, MapAllocator>
+            custom_map(std::less<int>{}, map_alloc);
+
+    for (int i = 0; i < 10; ++i)
+        custom_map.emplace(i, factorial(i));
+
+    std::cout << "std::map with custom allocator:\n";
+    for (const auto& [key, value] : custom_map)
+        std::cout << key << " " << value << '\n';
+
+    std::cout << '\n';
+
+    MyContainer<int> default_container;
+
+    for (int i = 0; i < 10; ++i)
+        default_container.push_back(i);
+
+    std::cout << "MyContainer with default allocator:\n";
+    for (int v : default_container)
+        std::cout << v << '\n';
+
+    std::cout << '\n';
 
 
+    using ContainerAllocator =
+            MyMapAllocator<
+                    int,
+                    my_allocator::policy::FixedCapacity
+            >;
 
-    std::map<
-            int,
-            value,
-            std::less<int>,
-            MyMapAllocator<std::pair<const int, value>>
-    > m(std::less<int>{}, alloc);
+    // std::vector performs no internal allocations, so fixed allocator capacity
+    // directly limits the number of stored elements
+    ContainerAllocator container_alloc(10);
 
-    try{
-        for(int i = 0; i < 100; i++)
-        {
-            m[i] = value(i);
+    MyContainer<int, ContainerAllocator>
+            custom_container(container_alloc);
 
-            if(i % 2 == 0)
-                cc.push_front(value(i));
-            else
-                cc.push_back(value(i));
+    for (int i = 0; i < 10; ++i)
+        custom_container.push_back(i);
 
-         //   std::cout << i << std::endl;
-        }
-    } catch (std::exception& e)
-    {
-        std::cout << e.what() << std::endl;
-    }
+    std::cout << "MyContainer with custom allocator:\n";
+    for (int v : custom_container)
+        std::cout << v << '\n';
 
-    int i = 0;
-
-    for(auto a:cc)
-    {
-        std::cout << i << " " << a.getI() << std::endl;
-        i++;
-    }
 
     return 0;
 }

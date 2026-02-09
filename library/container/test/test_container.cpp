@@ -6,9 +6,7 @@
 
 BOOST_AUTO_TEST_SUITE(mycontainer_basic)
 
-// ---------------------------------------------
-// empty(), size()
-// ---------------------------------------------
+
     BOOST_AUTO_TEST_CASE(default_constructed_is_empty)
     {
         MyContainer<int> c;
@@ -17,9 +15,7 @@ BOOST_AUTO_TEST_SUITE(mycontainer_basic)
         BOOST_CHECK_EQUAL(c.size(), 0u);
     }
 
-// ---------------------------------------------
-// push_front()
-// ---------------------------------------------
+
     BOOST_AUTO_TEST_CASE(push_front_single)
     {
         MyContainer<int> c;
@@ -52,9 +48,7 @@ BOOST_AUTO_TEST_SUITE(mycontainer_basic)
 
     }
 
-// ---------------------------------------------
-// push_back()
-// ---------------------------------------------
+
     BOOST_AUTO_TEST_CASE(push_back_single)
     {
         MyContainer<int> c;
@@ -86,9 +80,7 @@ BOOST_AUTO_TEST_SUITE(mycontainer_basic)
 
     }
 
-// ---------------------------------------------
-// mixed push_front / push_back
-// ---------------------------------------------
+
     BOOST_AUTO_TEST_CASE(mixed_push)
     {
         MyContainer<int> c;
@@ -110,9 +102,7 @@ BOOST_AUTO_TEST_SUITE(mycontainer_basic)
 
     }
 
-// ---------------------------------------------
-// pop_front()
-// ---------------------------------------------
+
     BOOST_AUTO_TEST_CASE(pop_front_basic)
     {
         MyContainer<int> c;
@@ -146,9 +136,7 @@ BOOST_AUTO_TEST_SUITE(mycontainer_basic)
         BOOST_CHECK(c.empty());
     }
 
-// ---------------------------------------------
-// clear()
-// ---------------------------------------------
+
     BOOST_AUTO_TEST_CASE(clear_empties_container)
     {
         MyContainer<int> c;
@@ -163,9 +151,7 @@ BOOST_AUTO_TEST_SUITE(mycontainer_basic)
         BOOST_CHECK(c.begin() == c.end());
     }
 
-// ---------------------------------------------
-// iterator
-// ---------------------------------------------
+
     BOOST_AUTO_TEST_CASE(iterator_traversal)
     {
         MyContainer<int> c;
@@ -191,9 +177,6 @@ BOOST_AUTO_TEST_SUITE(mycontainer_basic)
         BOOST_CHECK_EQUAL(*it, 2);
     }
 
-// ---------------------------------------------
-// allocator compatibility (smoke test)
-// ---------------------------------------------
     BOOST_AUTO_TEST_CASE(allocator_compatibility_smoke)
     {
         MyContainer<int, std::allocator<int>> c;
@@ -203,5 +186,6 @@ BOOST_AUTO_TEST_SUITE(mycontainer_basic)
 
         BOOST_CHECK_EQUAL(c.size(), 5u);
     }
+
 
 BOOST_AUTO_TEST_SUITE_END()

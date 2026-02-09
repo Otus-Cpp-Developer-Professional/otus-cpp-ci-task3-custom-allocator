@@ -82,3 +82,54 @@ BOOST_AUTO_TEST_CASE(allocator_is_copyable)
     BOOST_CHECK_EQUAL(*p, 42);
 }
 
+BOOST_AUTO_TEST_CASE(fixed_capacity_throws_bad_alloc)
+{
+    using namespace my_allocator::policy;
+
+    // allocator limited to 2 elements
+    MyMapAllocator<int, FixedCapacity> alloc(2);
+
+    int* a = alloc.allocate(1);
+    int* b = alloc.allocate(1);
+
+    BOOST_REQUIRE(a != nullptr);
+    BOOST_REQUIRE(b != nullptr);
+
+    // third allocation exceeds element limit
+    BOOST_CHECK_THROW(
+            alloc.allocate(1),
+            std::bad_alloc
+    );
+}
+
+BOOST_AUTO_TEST_CASE(expandable_allocator_grows)
+{
+    using namespace my_allocator::policy;
+
+    // initial capacity is small, but allocator is expandable
+    MyMapAllocator<int, ExpandableCapacity> alloc(2);
+
+    int* a = alloc.allocate(1);
+    int* b = alloc.allocate(1);
+    int* c = nullptr;
+
+    BOOST_REQUIRE(a != nullptr);
+    BOOST_REQUIRE(b != nullptr);
+
+    // should NOT throw, allocator may expand
+    BOOST_CHECK_NO_THROW(
+            c = alloc.allocate(1)
+    );
+
+    BOOST_REQUIRE(c != nullptr);
+
+    *a = 1;
+    *b = 2;
+    *c = 3;
+
+    BOOST_CHECK_EQUAL(*a, 1);
+    BOOST_CHECK_EQUAL(*b, 2);
+    BOOST_CHECK_EQUAL(*c, 3);
+}
+
+
