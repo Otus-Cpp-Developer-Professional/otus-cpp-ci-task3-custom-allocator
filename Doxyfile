@@ -1,4 +1,4 @@
-PROJECT_NAME = "Custom allocator and container"
+PROJECT_NAME = "Custom STL-Compatible Allocator and Container"
 
 INPUT = README.md library apps
 RECURSIVE = YES
