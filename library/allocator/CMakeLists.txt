@@ -30,7 +30,7 @@ else()
 endif()
 
 # -------------------------------------------------
-# Library properties (опционально)
+# Library properties 
 # -------------------------------------------------
 
 set_target_properties(allocator PROPERTIES
