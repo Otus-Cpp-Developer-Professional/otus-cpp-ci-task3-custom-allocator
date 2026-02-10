@@ -40,8 +40,15 @@ private:
      */
     struct Node {
         T value;
-        Node* next = nullptr;
+        Node* next;
+
+        Node() = default;
+
+        template<typename... Args>
+        explicit Node(Node* n, Args&&... args)
+                : value(std::forward<Args>(args)...), next(n) {}
     };
+
 
     using allocator_traits_t = std::allocator_traits<Allocator>;
 
@@ -219,10 +226,7 @@ private:
     Node* create_node(Args&&... args) {
         Node* p = node_traits_t::allocate(node_alloc_, 1);
         try {
-            node_traits_t::construct(
-                    node_alloc_,
-                    std::addressof(p->value),
-                    std::forward<Args>(args)...);
+            node_traits_t::construct(node_alloc_, p, nullptr, args...);
             p->next = nullptr;
         } catch (...) {
             node_traits_t::deallocate(node_alloc_, p, 1);
