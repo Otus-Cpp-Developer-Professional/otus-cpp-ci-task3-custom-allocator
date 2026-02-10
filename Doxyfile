@@ -1,7 +1,8 @@
-PROJECT_NAME = "allocator"
+PROJECT_NAME = "Custom allocator and container"
 
-INPUT = library apps
+INPUT = README.md library apps
 RECURSIVE = YES
+
 USE_MDFILE_AS_MAINPAGE = README.md
 
 GENERATE_HTML = YES
