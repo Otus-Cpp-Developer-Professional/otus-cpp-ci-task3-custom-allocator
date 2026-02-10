@@ -1,4 +1,4 @@
-\mainpage ## Custom STL-Compatible Allocator and Container
+\mainpage Custom STL-Compatible Allocator and Container
 
 ## Custom STL-Compatible Allocator and Container
 
