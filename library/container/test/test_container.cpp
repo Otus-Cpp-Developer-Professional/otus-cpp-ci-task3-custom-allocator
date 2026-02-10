@@ -187,5 +187,24 @@ BOOST_AUTO_TEST_SUITE(mycontainer_basic)
         BOOST_CHECK_EQUAL(c.size(), 5u);
     }
 
+    BOOST_AUTO_TEST_CASE(iterator_walk_and_overincrement)
+    {
+        MyContainer<int> c;
+        c.push_back(1);
+        c.push_back(2);
+
+        auto it = c.begin();
+
+        ++it; // 2
+        ++it; // end
+
+        BOOST_CHECK(it == c.end());
+
+        ++it; //overincrement
+        BOOST_CHECK(it == c.end());
+    }
+
+
+
 
 BOOST_AUTO_TEST_SUITE_END()
