@@ -1,5 +1,7 @@
 \mainpage ## Custom STL-Compatible Allocator and Container
 
+## Custom STL-Compatible Allocator and Container
+
 This project implements a custom STL-compatible allocator and a simple container
 parameterized by an allocator, as required by the assignment.
 
