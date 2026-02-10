@@ -1,7 +1,8 @@
 PROJECT_NAME = "allocator"
 
-INPUT = include src
+INPUT = library apps
 RECURSIVE = YES
+USE_MDFILE_AS_MAINPAGE = README.md
 
 GENERATE_HTML = YES
 HTML_OUTPUT = html
