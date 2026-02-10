@@ -167,7 +167,6 @@ public:
         Node* n = create_node(value);
         n->next = &sentinel_;
         if (empty()) {
-            n = &sentinel_;
             head_ = tail_ = n;
         } else {
             tail_->next = n;
