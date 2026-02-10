@@ -112,7 +112,9 @@ public:
      */
     explicit MyContainer(const Allocator& alloc = Allocator{})
             : node_alloc_(alloc)
-    {}
+    {
+        sentinel_.next = &sentinel_;
+    }
 
     /**
      * @brief Destroys the container and all stored elements
@@ -125,12 +127,13 @@ public:
     iterator begin() noexcept { return iterator(head_); }
 
     /// Returns iterator past the last element
-    iterator end() noexcept { return iterator(nullptr); }
+    iterator end() noexcept { return iterator(&sentinel_); }
 
     /// Checks whether the container is empty
     [[nodiscard]] bool empty() const noexcept {
-        return head_ == nullptr;
+        return head_ == &sentinel_;
     }
+
 
     /// Returns number of elements in the container
     [[nodiscard]] std::size_t size() const noexcept {
@@ -145,7 +148,8 @@ public:
     void push_front(const T& value) {
         Node* n = create_node(value);
 
-        if (!head_) {
+        if (empty()) {
+            n->next =&sentinel_;
             head_ = tail_ = n;
         } else {
             n->next = head_;
@@ -161,8 +165,9 @@ public:
      */
     void push_back(const T& value) {
         Node* n = create_node(value);
-
-        if (!tail_) {
+        n->next = &sentinel_;
+        if (empty()) {
+            n = &sentinel_;
             head_ = tail_ = n;
         } else {
             tail_->next = n;
@@ -177,14 +182,14 @@ public:
      * Does nothing if the container is empty.
      */
     void pop_front() {
-        if (!head_)
+        if (empty())
             return;
 
         Node* old = head_;
         head_ = head_->next;
 
-        if (!head_)
-            tail_ = nullptr;
+        if (head_ == &sentinel_)
+            tail_ = &sentinel_;
 
         destroy_node(old);
         --size_;
@@ -194,14 +199,11 @@ public:
      * @brief Removes all elements from the container
      */
     void clear() noexcept {
-        while (head_) {
-            Node* tmp = head_;
-            head_ = head_->next;
-            destroy_node(tmp);
+        while (!empty()) {
+            pop_front();
         }
-        tail_ = nullptr;
-        size_ = 0;
     }
+
 
 private:
     /**
@@ -241,8 +243,12 @@ private:
     }
 
 private:
+
     node_allocator_t node_alloc_;
-    Node* head_ = nullptr;
-    Node* tail_ = nullptr;
+    Node sentinel_{};
+
+    Node* head_ = &sentinel_;
+    Node* tail_ = &sentinel_;
+
     std::size_t size_ = 0;
 };
