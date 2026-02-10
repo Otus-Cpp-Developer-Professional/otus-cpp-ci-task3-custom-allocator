@@ -27,7 +27,7 @@ namespace my_allocator::detail {
         explicit AllocatorState(std::size_t max_elements) : max_elements_(max_elements) {}
     };
 
-} // namespace my_allocator::detail
+}
 
 /**
  * @brief STL-compatible allocator with optional fixed or expandable capacity
@@ -62,8 +62,16 @@ template<
 >
 class MyMapAllocator
 {
+
 public:
     using value_type = T;
+
+    using propagate_on_container_copy_assignment = std::true_type;
+    using propagate_on_container_move_assignment = std::true_type;
+    using propagate_on_container_swap            = std::true_type;
+    
+    using is_always_equal = std::false_type;
+
 
 private:
 
