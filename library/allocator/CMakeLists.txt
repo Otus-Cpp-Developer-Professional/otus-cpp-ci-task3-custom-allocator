@@ -20,7 +20,7 @@ target_include_directories(allocator
 target_compile_features(allocator INTERFACE cxx_std_20)
 
 # -------------------------------------------------
-# Warnings (аккуратно, per-target)
+# Warnings 
 # -------------------------------------------------
 
 if (MSVC)
