@@ -16,7 +16,18 @@ namespace my_allocator::policy
     struct ExpandableCapacity {};
 }
 
+namespace my_allocator::detail {
 
+    struct AllocatorState {
+
+        std::size_t max_elements_ = 0;
+        std::size_t allocated_ = 0;
+
+        AllocatorState() = default;
+        explicit AllocatorState(std::size_t max_elements) : max_elements_(max_elements) {}
+    };
+
+} // namespace my_allocator::detail
 
 /**
  * @brief STL-compatible allocator with optional fixed or expandable capacity
@@ -55,12 +66,12 @@ public:
     using value_type = T;
 
 private:
+
     using Arena = my_allocator::detail::Arena;
+    using AllocatorState = my_allocator::detail::AllocatorState;
 
+    std::shared_ptr<AllocatorState> state_;
     std::shared_ptr<Arena> arena_;
-
-    std::size_t max_elements_ = 0;     // logical capacity in elements
-    std::size_t allocated_    = 0;     // allocated elements count
 
 public:
     /// Default constructor is disabled: capacity must be specified
@@ -75,8 +86,9 @@ public:
      * @param max_elements Maximum number of elements that can be allocated
      */
     explicit MyMapAllocator(std::size_t max_elements)
-            : max_elements_(max_elements)
     {
+        state_ = std::make_shared<AllocatorState>(max_elements);
+
         const std::size_t arena_bytes = max_elements * sizeof(T);
         arena_ = std::make_shared<Arena>(arena_bytes);
     }
@@ -91,8 +103,7 @@ public:
     template<typename U>
     explicit MyMapAllocator(const MyMapAllocator<U, CapacityPolicy>& other) noexcept
             : arena_(other.arena_)
-            , max_elements_(other.max_elements_)
-            , allocated_(other.allocated_)
+            , state_(other.state_)
     {}
 
     /**
@@ -110,7 +121,7 @@ public:
 
         if constexpr (std::is_same_v<CapacityPolicy, FixedCapacity>)
         {
-            if (allocated_ + n > max_elements_)
+            if (state_->allocated_ + n > state_->max_elements_)
                 throw std::bad_alloc{};
         }
 
@@ -119,7 +130,7 @@ public:
                 alignof(T)
         );
 
-        allocated_ += n;
+        state_->allocated_ += n;
         return static_cast<T*>(ptr);
     }
 

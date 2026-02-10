@@ -133,3 +133,36 @@ BOOST_AUTO_TEST_CASE(expandable_allocator_grows)
 }
 
 
+BOOST_AUTO_TEST_CASE(copy_constructor_shares_arena)
+{
+    MyMapAllocator<int> alloc1(4);
+    auto alloc2 = alloc1;
+
+    int* a = alloc1.allocate(1);
+    int* b = alloc2.allocate(1);
+
+    BOOST_REQUIRE(a != nullptr);
+    BOOST_REQUIRE(b != nullptr);
+
+    int* c = alloc1.allocate(1);
+    int* d = alloc2.allocate(1);
+
+    BOOST_REQUIRE(c != nullptr);
+    BOOST_REQUIRE(d != nullptr);
+
+    BOOST_CHECK_THROW(alloc1.allocate(1), std::bad_alloc);
+    BOOST_CHECK_THROW(alloc2.allocate(1), std::bad_alloc);
+}
+
+BOOST_AUTO_TEST_CASE(copy_assignment_replaces_state)
+{
+    MyMapAllocator<int> alloc1(2);
+    MyMapAllocator<int> alloc2(2);
+
+    alloc2.allocate(1);
+    alloc2.allocate(1);
+
+    alloc1 = alloc2;
+
+    BOOST_CHECK_THROW(alloc1.allocate(1), std::bad_alloc);
+}
