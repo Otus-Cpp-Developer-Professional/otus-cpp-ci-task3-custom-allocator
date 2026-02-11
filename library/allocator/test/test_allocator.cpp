@@ -3,13 +3,17 @@
 
 #include <map>
 #include <type_traits>
+#include <cstdint>
 
 #include "MyMapAllocator.hpp"
 
+using my_allocator::ExpandableArenaInitialCapacity;
 
-BOOST_AUTO_TEST_CASE(allocate_single_int)
+
+
+BOOST_AUTO_TEST_CASE(allocate_single_int_expandable)
 {
-    MyMapAllocator<int> alloc(1024);
+    MyMapAllocator<int> alloc(ExpandableArenaInitialCapacity{32});
 
     int* p = alloc.allocate(1);
     BOOST_REQUIRE(p != nullptr);
@@ -18,10 +22,9 @@ BOOST_AUTO_TEST_CASE(allocate_single_int)
     BOOST_CHECK_EQUAL(*p, 42);
 }
 
-
-BOOST_AUTO_TEST_CASE(allocate_array)
+BOOST_AUTO_TEST_CASE(allocate_array_expandable)
 {
-    MyMapAllocator<int> alloc(1024);
+    MyMapAllocator<int> alloc(ExpandableArenaInitialCapacity{32});
 
     constexpr std::size_t N = 10;
     int* p = alloc.allocate(N);
@@ -33,13 +36,17 @@ BOOST_AUTO_TEST_CASE(allocate_array)
         BOOST_CHECK_EQUAL(p[i], i);
 }
 
+
+
 BOOST_AUTO_TEST_CASE(alignment_check)
 {
     struct alignas(32) BigAligned {
         std::uint64_t data[4];
     };
 
-    MyMapAllocator<BigAligned> alloc(1024);
+    MyMapAllocator<BigAligned> alloc(
+            ExpandableArenaInitialCapacity{8}
+    );
 
     BigAligned* p = alloc.allocate(1);
     auto addr = reinterpret_cast<std::uintptr_t>(p);
@@ -48,17 +55,97 @@ BOOST_AUTO_TEST_CASE(alignment_check)
 }
 
 
-BOOST_AUTO_TEST_CASE(map_with_custom_allocator)
-{
-    using Map =
-            std::map<
-                    int,
-                    int,
-                    std::less<int>,
-                    MyMapAllocator<std::pair<const int, int>>
-            >;
 
-    Map m{ MyMapAllocator<std::pair<const int, int>>(4096) };
+BOOST_AUTO_TEST_CASE(fixed_capacity_throws_bad_alloc)
+{
+    MyMapAllocator<int, 2> alloc;
+
+    int* a = alloc.allocate(1);
+    int* b = alloc.allocate(1);
+
+    BOOST_REQUIRE(a != nullptr);
+    BOOST_REQUIRE(b != nullptr);
+
+    BOOST_CHECK_THROW(
+            alloc.allocate(1),
+            std::bad_alloc
+    );
+}
+
+
+
+BOOST_AUTO_TEST_CASE(expandable_allocator_grows)
+{
+    MyMapAllocator<int> alloc(
+            ExpandableArenaInitialCapacity{1}
+    );
+
+    int* a = alloc.allocate(1);
+    int* b = nullptr;
+
+    BOOST_REQUIRE(a != nullptr);
+
+    BOOST_CHECK_NO_THROW(
+            b = alloc.allocate(1)
+    );
+
+    BOOST_REQUIRE(b != nullptr);
+
+    *a = 1;
+    *b = 2;
+
+    BOOST_CHECK_EQUAL(*a, 1);
+    BOOST_CHECK_EQUAL(*b, 2);
+}
+
+
+
+BOOST_AUTO_TEST_CASE(copy_constructor_shares_state_fixed)
+{
+    MyMapAllocator<int, 2> alloc1;
+    auto alloc2 = alloc1;
+
+    alloc1.allocate(1);
+    alloc2.allocate(1);
+
+    BOOST_CHECK_THROW(
+            alloc1.allocate(1),
+            std::bad_alloc
+    );
+
+    BOOST_CHECK_THROW(
+            alloc2.allocate(1),
+            std::bad_alloc
+    );
+}
+
+BOOST_AUTO_TEST_CASE(copy_assignment_shares_state_fixed)
+{
+    MyMapAllocator<int, 2> alloc1;
+    MyMapAllocator<int, 2> alloc2;
+
+    alloc2.allocate(1);
+    alloc2.allocate(1);
+
+    alloc1 = alloc2;
+
+    BOOST_CHECK_THROW(
+            alloc1.allocate(1),
+            std::bad_alloc
+    );
+}
+
+
+
+BOOST_AUTO_TEST_CASE(map_with_custom_allocator_fixed)
+{
+    using Alloc =
+            MyMapAllocator<std::pair<const int, int>, 16>;
+
+    using Map =
+            std::map<int, int, std::less<int>, Alloc>;
+
+    Map m;
 
     m.emplace(1, 10);
     m.emplace(2, 20);
@@ -70,99 +157,3 @@ BOOST_AUTO_TEST_CASE(map_with_custom_allocator)
 }
 
 
-BOOST_AUTO_TEST_CASE(allocator_is_copyable)
-{
-    MyMapAllocator<int> a1(1024);
-    MyMapAllocator<int> a2(a1);
-
-    int* p = a2.allocate(1);
-    BOOST_REQUIRE(p != nullptr);
-
-    *p = 42;
-    BOOST_CHECK_EQUAL(*p, 42);
-}
-
-BOOST_AUTO_TEST_CASE(fixed_capacity_throws_bad_alloc)
-{
-    using namespace my_allocator::policy;
-
-    // allocator limited to 2 elements
-    MyMapAllocator<int, FixedCapacity> alloc(2);
-
-    int* a = alloc.allocate(1);
-    int* b = alloc.allocate(1);
-
-    BOOST_REQUIRE(a != nullptr);
-    BOOST_REQUIRE(b != nullptr);
-
-    // third allocation exceeds element limit
-    BOOST_CHECK_THROW(
-            alloc.allocate(1),
-            std::bad_alloc
-    );
-}
-
-BOOST_AUTO_TEST_CASE(expandable_allocator_grows)
-{
-    using namespace my_allocator::policy;
-
-    // initial capacity is small, but allocator is expandable
-    MyMapAllocator<int, ExpandableCapacity> alloc(2);
-
-    int* a = alloc.allocate(1);
-    int* b = alloc.allocate(1);
-    int* c = nullptr;
-
-    BOOST_REQUIRE(a != nullptr);
-    BOOST_REQUIRE(b != nullptr);
-
-    // should NOT throw, allocator may expand
-    BOOST_CHECK_NO_THROW(
-            c = alloc.allocate(1)
-    );
-
-    BOOST_REQUIRE(c != nullptr);
-
-    *a = 1;
-    *b = 2;
-    *c = 3;
-
-    BOOST_CHECK_EQUAL(*a, 1);
-    BOOST_CHECK_EQUAL(*b, 2);
-    BOOST_CHECK_EQUAL(*c, 3);
-}
-
-
-BOOST_AUTO_TEST_CASE(copy_constructor_shares_arena)
-{
-    MyMapAllocator<int> alloc1(4);
-    auto alloc2 = alloc1;
-
-    int* a = alloc1.allocate(1);
-    int* b = alloc2.allocate(1);
-
-    BOOST_REQUIRE(a != nullptr);
-    BOOST_REQUIRE(b != nullptr);
-
-    int* c = alloc1.allocate(1);
-    int* d = alloc2.allocate(1);
-
-    BOOST_REQUIRE(c != nullptr);
-    BOOST_REQUIRE(d != nullptr);
-
-    BOOST_CHECK_THROW(alloc1.allocate(1), std::bad_alloc);
-    BOOST_CHECK_THROW(alloc2.allocate(1), std::bad_alloc);
-}
-
-BOOST_AUTO_TEST_CASE(copy_assignment_replaces_state)
-{
-    MyMapAllocator<int> alloc1(2);
-    MyMapAllocator<int> alloc2(2);
-
-    alloc2.allocate(1);
-    alloc2.allocate(1);
-
-    alloc1 = alloc2;
-
-    BOOST_CHECK_THROW(alloc1.allocate(1), std::bad_alloc);
-}

@@ -29,10 +29,10 @@ int main()
     using MapAllocator =
             MyMapAllocator<
                     std::pair<const int, int>,
-                    my_allocator::policy::FixedCapacity
+                    16
             >;
     // We need extra capacity for internal map allocations
-    MapAllocator map_alloc(16); //not 10
+    MapAllocator map_alloc{}; //not 10
 
     std::map<int, int, std::less<int>, MapAllocator>
             custom_map(std::less<int>{}, map_alloc);
@@ -61,12 +61,12 @@ int main()
     using ContainerAllocator =
             MyMapAllocator<
                     int,
-                    my_allocator::policy::FixedCapacity
+                    10
             >;
 
     // std::vector performs no internal allocations, so fixed allocator capacity
     // directly limits the number of stored elements
-    ContainerAllocator container_alloc(10);
+    ContainerAllocator container_alloc;
 
     MyContainer<int, ContainerAllocator>
             custom_container(container_alloc);
