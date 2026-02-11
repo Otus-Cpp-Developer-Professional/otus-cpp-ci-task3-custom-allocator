@@ -78,6 +78,7 @@ int main()
     for (int v : custom_container)
         std::cout << v << '\n';
 
-
+    int b;
+    std::cin >> b;
     return 0;
 }

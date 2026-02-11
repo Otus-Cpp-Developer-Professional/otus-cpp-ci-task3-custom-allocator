@@ -210,17 +210,7 @@ public:
      * Logical allocation counter is not decreased here
      * because the arena follows monotonic allocation model.
      */
-    void deallocate(T*, std::size_t n) noexcept
-    {
-        if constexpr (MaxElements != 0)
-        {
-            if (state_->allocated_ >= n)
-                state_->allocated_ -= n;
-            else
-                state_->allocated_ = 0;
-        }
-    }
-
+    void deallocate(T*, std::size_t n) noexcept {}
 
     template<typename U, std::size_t M>
     friend class MyMapAllocator;
