@@ -4,6 +4,7 @@
 #include <map>
 #include <type_traits>
 #include <cstdint>
+#include <forward_list>
 
 #include "MyMapAllocator.hpp"
 
@@ -155,5 +156,36 @@ BOOST_AUTO_TEST_CASE(map_with_custom_allocator_fixed)
     BOOST_CHECK_EQUAL(m[2], 20);
     BOOST_CHECK_EQUAL(m[3], 30);
 }
+
+BOOST_AUTO_TEST_CASE(vector_shared_budget_release_after_single_destroy)
+{
+    using Alloc = MyMapAllocator<int, 5>;
+    using List   = std::forward_list<int, Alloc>;
+
+    Alloc alloc;
+
+    List l2(alloc); //1 allocate
+
+    {
+        List l1(alloc);
+
+        l1.push_front(1);
+        l2.push_front(20);
+
+
+        BOOST_CHECK_NO_THROW(l2.push_front(2));
+
+        BOOST_CHECK_THROW(
+                l2.push_front(3),
+                std::bad_alloc
+        );
+    } //l1 dead - 2 deallocate
+
+    BOOST_CHECK_NO_THROW(l2.push_front(40));
+    BOOST_CHECK_NO_THROW(l2.push_front(50));
+
+    BOOST_CHECK_THROW(l2.push_front(60), std::bad_alloc);
+}
+
 
 
