@@ -107,6 +107,7 @@ public:
      * - move assignment propagates allocator
      * - swap propagates allocator
      */
+
     using propagate_on_container_copy_assignment = std::true_type;
     using propagate_on_container_move_assignment = std::true_type;
     using propagate_on_container_swap            = std::true_type;
@@ -139,6 +140,7 @@ public:
      * Arena size is computed at compile time as:
      *   MaxElements * sizeof(T)
      */
+
     explicit MyMapAllocator()
     requires (MaxElements > 0)
     {
@@ -156,6 +158,7 @@ public:
      * No element limit is enforced.
      * Initial arena size is specified in number of elements.
      */
+
     explicit MyMapAllocator(my_allocator::ExpandableArenaInitialCapacity elements)
     requires (MaxElements == 0)
     {
@@ -171,6 +174,7 @@ public:
      * Shares arena and state with other allocator.
      * Required for STL allocator-aware containers.
      */
+
     template<typename U>
     explicit MyMapAllocator(const MyMapAllocator<U, MaxElements>& other) noexcept
             : state_(other.state_),
@@ -186,6 +190,8 @@ public:
      * In expandable mode:
      *   No element limit is enforced.
      */
+
+
     T* allocate(std::size_t n)
     {
         if constexpr (MaxElements != 0)
@@ -210,6 +216,7 @@ public:
      * Logical allocation counter is not decreased here
      * because the arena follows monotonic allocation model.
      */
+
     void deallocate(T*, std::size_t n) noexcept {}
 
     template<typename U, std::size_t M>
