@@ -14,7 +14,6 @@ int factorial(int n)
 
 int main()
 {
-
     std::map<int, int> default_map;
 
     for (int i = 0; i < 10; ++i)
@@ -24,59 +23,92 @@ int main()
     for (const auto& [key, value] : default_map)
         std::cout << key << " " << value << '\n';
 
-    std::cout << '\n';
+    std::cout << "\n";
 
-    using MapAllocator =
+
+    // ============================================================
+    // Fixed policy example
+    // ============================================================
+
+    using FixedMapPolicy =
+            my_allocator::policy::Fixed<16>;
+
+    using FixedMapAllocator =
             MyMapAllocator<
                     std::pair<const int, int>,
-                    16
+                    FixedMapPolicy
             >;
-    // We need extra capacity for internal map allocations
-    MapAllocator map_alloc{}; //not 10
 
-    std::map<int, int, std::less<int>, MapAllocator>
-            custom_map(std::less<int>{}, map_alloc);
+    std::map<int, int, std::less<int>, FixedMapAllocator>
+            fixed_map;
 
     for (int i = 0; i < 10; ++i)
-        custom_map.emplace(i, factorial(i));
+        fixed_map.emplace(i, factorial(i));
 
-    std::cout << "std::map with custom allocator:\n";
-    for (const auto& [key, value] : custom_map)
+    std::cout << "std::map with fixed allocator (limit = 16):\n";
+    for (const auto& [key, value] : fixed_map)
         std::cout << key << " " << value << '\n';
 
-    std::cout << '\n';
-
-    MyContainer<int> default_container;
-
-    for (int i = 0; i < 10; ++i)
-        default_container.push_back(i);
-
-    std::cout << "MyContainer with default allocator:\n";
-    for (int v : default_container)
-        std::cout << v << '\n';
-
-    std::cout << '\n';
+    std::cout << "\n";
 
 
-    using ContainerAllocator =
+    // ============================================================
+    // Expandable policy example (std::map)
+    // ============================================================
+
+    using ExpandableMapPolicy =
+            my_allocator::policy::Expandable<4>;
+    // initial capacity = 4 elements
+    // no logical limit
+
+    using ExpandableMapAllocator =
             MyMapAllocator<
-                    int,
-                    10
+                    std::pair<const int, int>,
+                    ExpandableMapPolicy
             >;
 
-    // std::vector performs no internal allocations, so fixed allocator capacity
-    // directly limits the number of stored elements
-    ContainerAllocator container_alloc;
+    std::map<int, int, std::less<int>, ExpandableMapAllocator>
+            expandable_map;
 
-    MyContainer<int, ContainerAllocator>
-            custom_container(container_alloc);
-
+    // Вставляем больше, чем initial (4)
+    // Логического лимита нет — арена должна расширяться
     for (int i = 0; i < 10; ++i)
-        custom_container.push_back(i);
+        expandable_map.emplace(i, factorial(i));
 
-    std::cout << "MyContainer with custom allocator:\n";
-    for (int v : custom_container)
+    std::cout << "std::map with expandable allocator (initial = 4):\n";
+    for (const auto& [key, value] : expandable_map)
+        std::cout << key << " " << value << '\n';
+
+    std::cout << "\n";
+
+
+    // ============================================================
+    // MyContainer with expandable allocator
+    // ============================================================
+
+    using ExpandableContainerPolicy =
+            my_allocator::policy::Expandable<2>;
+    // намеренно маленький initial
+
+    using ExpandableContainerAllocator =
+            MyMapAllocator<
+                    int,
+                    ExpandableContainerPolicy
+            >;
+
+    MyContainer<int, ExpandableContainerAllocator>
+            expandable_container;
+
+    // Вставляем больше initial (2)
+    // Контейнер должен продолжить работу без bad_alloc
+    for (int i = 0; i < 10; ++i)
+        expandable_container.push_back(i);
+
+    std::cout << "MyContainer with expandable allocator (initial = 2):\n";
+    for (int v : expandable_container)
         std::cout << v << '\n';
+
+    std::cout << "\n";
 
     int b;
     std::cin >> b;

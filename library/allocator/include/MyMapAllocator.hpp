@@ -14,100 +14,110 @@ namespace my_allocator {
         /**
          * @brief Internal shared state of the allocator.
          *
-         * This structure stores logical allocation statistics:
+         * Stores logical allocation accounting shared between all
+         * allocator copies referring to the same arena.
          *
-         * - max_elements_  – maximum number of elements allowed (fixed mode)
-         * - allocated_     – number of currently allocated elements
+         * - max_elements_ – maximum number of elements allowed
+         *                   (0 means unlimited)
+         * - allocated_    – number of elements logically allocated
          *
-         * The state is shared between allocator copies via std::shared_ptr,
-         * meaning copies of the allocator share the same logical budget.
+         * Copies of the allocator share this state via std::shared_ptr,
+         * meaning allocation limits are shared across containers
+         * using the same allocator instance.
          */
         struct AllocatorState {
 
             std::size_t max_elements_ = 0;
-            std::size_t allocated_ = 0;
+            std::size_t allocated_    = 0;
 
             AllocatorState() = default;
+
             explicit AllocatorState(std::size_t max_elements)
                     : max_elements_(max_elements) {}
         };
     }
 
 
-    /**
-     * @brief Tag type for expandable allocator mode.
-     *
-     * Used only when MaxElements == 0.
-     * Allows user to specify initial arena size in number of elements.
-     */
-    struct ExpandableArenaInitialCapacity
-    {
-        std::size_t value;
-    };
+    namespace policy {
+
+        /**
+         * @brief Fixed-capacity policy.
+         *
+         * @tparam Max     Maximum number of elements allowed.
+         * @tparam Initial Initial arena capacity in elements.
+         *
+         * Max and Initial are compile-time constants.
+         * Typically Initial == Max.
+         */
+        template<std::size_t Max, std::size_t Initial = Max>
+        struct Fixed {
+            static constexpr std::size_t max     = Max;
+            static constexpr std::size_t initial = Initial;
+        };
+
+        /**
+         * @brief Expandable policy.
+         *
+         * @tparam Initial Initial arena capacity in elements.
+         *
+         * No logical element limit is enforced (max == 0).
+         * Arena may grow internally when capacity is exceeded.
+         */
+        template<std::size_t Initial = 1024>
+        struct Expandable {
+            static constexpr std::size_t max     = 0;
+            static constexpr std::size_t initial = Initial;
+        };
+
+    }
+
 }
 
 
 /**
  * @brief STL-compatible arena-based allocator.
  *
- * This allocator provides two operation modes depending on MaxElements:
+ * Configuration is fully defined by the Policy type.
  *
- * 1. Fixed capacity mode (MaxElements > 0)
+ * The allocator behavior depends on Policy::max:
+ *
+ * 1. Fixed mode (Policy::max > 0)
  *    - Maximum number of elements is known at compile time.
  *    - Allocation beyond this limit throws std::bad_alloc.
- *    - The arena size is exactly MaxElements * sizeof(T).
  *
- * 2. Expandable mode (MaxElements == 0)
- *    - No element limit is enforced.
- *    - The arena may grow when capacity is exceeded.
- *    - Initial capacity is provided via ExpandableArenaInitialCapacity.
+ * 2. Expandable mode (Policy::max == 0)
+ *    - No logical element limit is enforced.
+ *    - Arena may grow when needed.
+ *
+ * Initial arena capacity is defined by Policy::initial.
  *
  * Copies of the allocator share:
  *  - underlying Arena
- *  - allocation state
+ *  - logical allocation state
  *
- * This means the logical allocation budget is shared across containers
- * that use copies of the allocator.
- *
- * Deallocation does not release physical memory inside the arena.
  * Memory is reclaimed only when the last allocator copy is destroyed.
  *
- * @tparam T           Value type
- * @tparam MaxElements Maximum number of elements (0 = expandable mode)
+ * @tparam T      Value type
+ * @tparam Policy Compile-time configuration type
  *
  * @note Not thread-safe.
  */
 template<
         typename T,
-        std::size_t MaxElements = 0
+        typename Policy = my_allocator::policy::Expandable<>
 >
 class MyMapAllocator
 {
-
 public:
-
-    /**
-     * @brief Rebind support required by STL containers.
-     *
-     * Allows containers to rebind allocator to internal node types.
-     */
-    template<typename U>
-    struct rebind
-    {
-        using other = MyMapAllocator<U, MaxElements>;
-    };
 
     using value_type = T;
 
     /**
      * @brief Propagation traits.
      *
-     * Allocator is stateful and shared. Therefore:
-     * - copy assignment propagates allocator
-     * - move assignment propagates allocator
-     * - swap propagates allocator
+     * Allocator is stateful and shared.
+     * Container copy/move/swap propagates allocator.
      */
-
     using propagate_on_container_copy_assignment = std::true_type;
     using propagate_on_container_move_assignment = std::true_type;
     using propagate_on_container_swap            = std::true_type;
@@ -121,8 +131,11 @@ public:
 
 private:
 
-    using Arena = my_allocator::detail::Arena;
+    using Arena          = my_allocator::detail::Arena;
     using AllocatorState = my_allocator::detail::AllocatorState;
+
+    static constexpr std::size_t MaxElements = Policy::max;
+    static constexpr std::size_t Initial     = Policy::initial;
 
     /// Shared allocation accounting
     std::shared_ptr<AllocatorState> state_;
@@ -133,50 +146,40 @@ private:
 public:
 
     /**
-     * @brief Constructor for fixed-capacity mode.
+     * @brief Default constructor.
      *
-     * Enabled only when MaxElements > 0.
+     * Behavior depends entirely on Policy:
      *
-     * Arena size is computed at compile time as:
-     *   MaxElements * sizeof(T)
+     * - If Policy::max > 0 → fixed logical limit
+     * - If Policy::max == 0 → unlimited logical capacity
+     *
+     * Arena initial size is Policy::initial * sizeof(T).
      */
-
-    explicit MyMapAllocator()
-    requires (MaxElements > 0)
+    MyMapAllocator()
     {
-        state_ = std::make_shared<AllocatorState>(MaxElements);
+        if constexpr (MaxElements > 0) {
+            state_ = std::make_shared<AllocatorState>(MaxElements);
+        } else {
+            state_ = std::make_shared<AllocatorState>();
+        }
 
-        constexpr std::size_t arena_bytes = MaxElements * sizeof(T);
+        constexpr std::size_t arena_bytes =
+                Initial * sizeof(T);
+
         arena_ = std::make_shared<Arena>(arena_bytes);
     }
 
     /**
-     * @brief Constructor for expandable mode.
+     * @brief Converting copy constructor.
      *
-     * Enabled only when MaxElements == 0.
+     * Required for allocator rebinding performed by
+     * std::allocator_traits.
      *
-     * No element limit is enforced.
-     * Initial arena size is specified in number of elements.
+     * Shares arena and state between different T instantiations
+     * of the same Policy.
      */
-
-    explicit MyMapAllocator(my_allocator::ExpandableArenaInitialCapacity elements)
-    requires (MaxElements == 0)
-    {
-        state_ = std::make_shared<AllocatorState>();  // unlimited logical capacity
-
-        std::size_t arena_bytes = elements.value * sizeof(T);
-        arena_ = std::make_shared<Arena>(arena_bytes);
-    }
-
-    /**
-     * @brief Copy constructor for rebind compatibility.
-     *
-     * Shares arena and state with other allocator.
-     * Required for STL allocator-aware containers.
-     */
-
     template<typename U>
-    explicit MyMapAllocator(const MyMapAllocator<U, MaxElements>& other) noexcept
+    MyMapAllocator(const MyMapAllocator<U, Policy>& other) noexcept
             : state_(other.state_),
               arena_(other.arena_)
     {}
@@ -185,13 +188,11 @@ public:
      * @brief Allocates memory for n objects of type T.
      *
      * In fixed mode:
-     *   Throws std::bad_alloc if element limit is exceeded.
+     *   Throws std::bad_alloc if logical limit is exceeded.
      *
      * In expandable mode:
-     *   No element limit is enforced.
+     *   No logical limit check is performed.
      */
-
-
     T* allocate(std::size_t n)
     {
         if constexpr (MaxElements != 0)
@@ -213,39 +214,25 @@ public:
      * @brief Deallocate memory for n objects.
      *
      * Physical memory is not returned to the arena.
-     * Logical allocation counter is not decreased here
-     * because the arena follows monotonic allocation model.
+     * Arena follows monotonic allocation model.
      */
+    void deallocate(T*, std::size_t) noexcept {}
 
-    void deallocate(T*, std::size_t n) noexcept {}
+    /**
+     * @brief Allocator equality.
+     *
+     * Two allocators are equal if they share the same arena.
+     */
+    bool operator==(const MyMapAllocator& other) const noexcept
+    {
+        return arena_ == other.arena_;
+    }
 
-    template<typename U, std::size_t M>
+    bool operator!=(const MyMapAllocator& other) const noexcept
+    {
+        return !(*this == other);
+    }
+
+    template<typename, typename>
     friend class MyMapAllocator;
-
-    template<typename T1, std::size_t M1,
-            typename T2, std::size_t M2>
-    friend bool operator==(const MyMapAllocator<T1, M1>&,
-                           const MyMapAllocator<T2, M2>&) noexcept;
 };
-
-
-/**
- * @brief Allocator equality comparison.
- *
- * Two allocators are equal if they share the same arena.
- */
-template<typename T1, std::size_t M1,
-        typename T2, std::size_t M2>
-bool operator==(const MyMapAllocator<T1, M1>& a,
-                const MyMapAllocator<T2, M2>& b) noexcept
-{
-    return a.arena_ == b.arena_;
-}
-
-template<typename T1, std::size_t M1,
-        typename T2, std::size_t M2>
-bool operator!=(const MyMapAllocator<T1, M1>& a,
-                const MyMapAllocator<T2, M2>& b) noexcept
-{
-    return !(a == b);
-}
