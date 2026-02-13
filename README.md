@@ -3,54 +3,87 @@
 ## Custom STL-Compatible Allocator and Container
 
 This project implements a custom STL-compatible allocator and a simple container
-parameterized by an allocator, as required by the assignment.
+parameterized by an allocator.
+
+The allocator configuration is defined entirely at compile time using a
+policy-based design.
 
 ## Allocator
 
-`MyMapAllocator` is a stateful allocator based on a byte-oriented memory arena.
+`MyMapAllocator<T, Policy>` is a stateful allocator based on a byte-oriented
+memory arena.
 
-Features:
-- STL-compatible allocator interface
-- Allocation is performed in **element units** (`allocate(n)` allocates `n` elements)
-- **Fixed-capacity mode**: allocation beyond the specified element limit throws `std::bad_alloc`
-- **Expandable mode** (optional): allocator may grow the underlying arena
-- Individual deallocation is intentionally not supported
-- Memory is released when the allocator is destroyed
+The allocator behavior is determined by the `Policy` type:
 
-Note:
-STL containers (e.g. `std::map`) may perform internal allocations during construction,
-so allocator capacity limits the number of allocation operations, not strictly the number
-of user-visible elements.
+- `policy::Fixed<Max, Initial>`
+  - Enforces a compile-time logical element limit (`Max`)
+  - Allocation beyond this limit throws `std::bad_alloc`
+  - Initial arena capacity is `Initial` elements
+
+- `policy::Expandable<Initial>`
+  - No logical element limit is enforced
+  - The arena may grow when capacity is exceeded
+  - Initial arena capacity is `Initial` elements
+
+### Features
+
+- Fully STL-compatible allocator interface
+- Policy-based compile-time configuration
+- Allocation is performed in **element units**
+  (`allocate(n)` allocates memory for `n` elements)
+- Shared logical allocation state between allocator copies
+- Monotonic allocation model (individual deallocation is not supported)
+- Memory is released when the last allocator instance is destroyed
+
+### Important Note
+
+STL containers (e.g. `std::map`) may perform internal allocations
+for node management and rebalancing.
+
+Therefore, fixed-capacity mode limits the total number of allocation
+operations, not strictly the number of user-visible elements.
 
 ## Custom Container
 
-`MyContainer` is a simple singly linked container that:
+`MyContainer<T, Allocator>` is a simple singly linked container that:
+
 - Is parameterized by an allocator (similar to STL containers)
 - Supports element insertion (`push_back`, `push_front`)
 - Supports forward iteration
 - Implements `begin()`, `end()`, `size()`, and `empty()`
 
-The container can be used with both `std::allocator` and the custom allocator.
+The container works with both `std::allocator` and `MyMapAllocator`.
 
 ## Demo Application
 
-The demo application:
-- Creates `std::map<int, int>` with default and custom allocators
-- Fills maps with values `{0..9 → factorial}`
-- Creates `MyContainer<int>` with default and custom allocators
-- Inserts values `0..9`
-- Prints all stored values to standard output
+The demo application demonstrates:
+
+- `std::map<int, int>` with default allocator
+- `std::map<int, int>` with fixed policy allocator
+- `std::map<int, int>` with expandable policy allocator
+- `MyContainer<int>` with default allocator
+- `MyContainer<int>` with fixed and expandable policies
+
+Maps are filled with values `{0..9 → factorial}`.
+Containers are filled with values `{0..9}`.
 
 ## Tests
 
 Unit tests (Boost.Test) verify:
-- Basic allocation and alignment
-- Fixed-capacity behavior (`std::bad_alloc` on overflow)
-- Optional expandable behavior
+
+- Basic allocation behavior
+- Correct alignment handling
+- Fixed-capacity overflow (`std::bad_alloc`)
+- Expandable arena growth
+- Shared allocator state across copies
 - Compatibility with `std::map`
-- Allocator copy/rebind correctness
+- Correct interaction with STL allocator_traits rebinding
 
 ## Notes
 
-This project is intended for educational purposes and demonstrates allocator mechanics,
-allocator-aware containers, and STL integration.
+This project is intended for educational purposes and demonstrates:
+
+- Policy-based allocator design
+- Stateful allocator semantics
+- STL allocator requirements
+- Integration with allocator-aware containers
