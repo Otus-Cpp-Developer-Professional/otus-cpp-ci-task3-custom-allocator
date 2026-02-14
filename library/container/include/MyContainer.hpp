@@ -107,6 +107,71 @@ public:
         friend bool operator!=(const iterator& a, const iterator& b) noexcept {
             return !(a == b);
         }
+
+        friend class const_iterator;
+    };
+
+    /**
+     * @brief Const forward iterator for MyContainer
+     *
+     * Provides read-only access to elements.
+     */
+    class const_iterator {
+        node_pointer cur_ = nullptr;
+
+    public:
+        using iterator_category = std::forward_iterator_tag;
+        using value_type        = T;
+        using difference_type   = std::ptrdiff_t;
+        using pointer           = const T*;
+        using reference         = const T&;
+
+        const_iterator() = default;
+        explicit const_iterator(node_pointer p) : cur_(p) {}
+        const_iterator(const iterator& it) : cur_(it.cur_) {}
+
+        reference operator*() const noexcept {
+            return cur_->value;
+        }
+
+        pointer operator->() const noexcept {
+            return std::addressof(cur_->value);
+        }
+
+        const_iterator& operator++() noexcept {
+            cur_ = cur_->next;
+            return *this;
+        }
+
+        const_iterator operator++(int) noexcept {
+            const_iterator tmp(*this);
+            ++(*this);
+            return tmp;
+        }
+
+        friend bool operator==(const const_iterator& a, const const_iterator& b) noexcept {
+            return a.cur_ == b.cur_;
+        }
+
+        friend bool operator!=(const const_iterator& a, const const_iterator& b) noexcept {
+            return !(a == b);
+        }
+
+        friend bool operator==(const iterator& a, const const_iterator& b) noexcept {
+            return a.cur_ == b.cur_;
+        }
+
+        friend bool operator==(const const_iterator& a, const iterator& b) noexcept {
+            return a.cur_ == b.cur_;
+        }
+
+        friend bool operator!=(const iterator& a, const const_iterator& b) noexcept {
+            return !(a == b);
+        }
+
+        friend bool operator!=(const const_iterator& a, const iterator& b) noexcept {
+            return !(a == b);
+        }
     };
 
     /**
@@ -135,6 +200,18 @@ public:
 
     /// Returns iterator past the last element
     iterator end() noexcept { return iterator(sentinel_ptr_); }
+
+    /// Returns const iterator to the first element
+    const_iterator begin() const noexcept { return const_iterator(head_); }
+
+    /// Returns const iterator past the last element
+    const_iterator end() const noexcept { return const_iterator(sentinel_ptr_); }
+
+    /// Returns const iterator to the first element
+    const_iterator cbegin() const noexcept { return begin(); }
+
+    /// Returns const iterator past the last element
+    const_iterator cend() const noexcept { return end(); }
 
     /// Checks whether the container is empty
     [[nodiscard]] bool empty() const noexcept {
