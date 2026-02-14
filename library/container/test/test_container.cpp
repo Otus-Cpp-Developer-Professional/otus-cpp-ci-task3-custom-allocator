@@ -3,6 +3,9 @@
 
 #include <vector>
 #include <MyContainer.hpp>
+#include <MyMapAllocator.hpp>
+
+namespace policy = my_allocator::policy;
 
 BOOST_AUTO_TEST_SUITE(mycontainer_basic)
 
@@ -205,6 +208,102 @@ BOOST_AUTO_TEST_SUITE(mycontainer_basic)
     }
 
 
+BOOST_AUTO_TEST_SUITE_END()
 
+
+// ============================================================
+// MyContainer with MyMapAllocator (integration)
+// ============================================================
+
+BOOST_AUTO_TEST_SUITE(mycontainer_with_myallocator)
+
+    BOOST_AUTO_TEST_CASE(expandable_push_back)
+    {
+        using Alloc = MyMapAllocator<int, policy::Expandable<2>>;
+        MyContainer<int, Alloc> c;
+
+        for (int i = 0; i < 10; ++i)
+            c.push_back(i);
+
+        BOOST_CHECK_EQUAL(c.size(), 10u);
+        int expected = 0;
+        for (int v : c) {
+            BOOST_CHECK_EQUAL(v, expected);
+            ++expected;
+        }
+    }
+
+    BOOST_AUTO_TEST_CASE(expandable_push_front)
+    {
+        using Alloc = MyMapAllocator<int, policy::Expandable<2>>;
+        MyContainer<int, Alloc> c;
+
+        for (int i = 0; i < 5; ++i)
+            c.push_front(i);
+
+        std::vector<int> v(c.begin(), c.end());
+        std::vector<int> expected{4, 3, 2, 1, 0};
+        BOOST_CHECK_EQUAL_COLLECTIONS(v.begin(), v.end(),
+                                      expected.begin(), expected.end());
+    }
+
+    BOOST_AUTO_TEST_CASE(fixed_capacity_within_limit)
+    {
+        using Alloc = MyMapAllocator<int, policy::Fixed<8>>;
+        MyContainer<int, Alloc> c;
+
+        for (int i = 0; i < 8; ++i)
+            c.push_back(i);
+
+        BOOST_CHECK_EQUAL(c.size(), 8u);
+    }
+
+    BOOST_AUTO_TEST_CASE(fixed_capacity_overflow_throws)
+    {
+        using Alloc = MyMapAllocator<int, policy::Fixed<3>>;
+        MyContainer<int, Alloc> c;
+
+        c.push_back(1);
+        c.push_back(2);
+        c.push_back(3);
+
+        BOOST_CHECK_THROW(c.push_back(4), std::bad_alloc);
+        BOOST_CHECK_EQUAL(c.size(), 3u);
+    }
+
+    BOOST_AUTO_TEST_CASE(copy_with_shared_allocator_state)
+    {
+        using Alloc = MyMapAllocator<int, policy::Fixed<6>>;
+        MyContainer<int, Alloc> c1;
+
+        c1.push_back(1);
+        c1.push_back(2);
+        c1.push_back(3);
+
+        MyContainer<int, Alloc> c2(c1);
+
+        BOOST_CHECK_EQUAL(c1.size(), 3u);
+        BOOST_CHECK_EQUAL(c2.size(), 3u);
+
+        // Fixed limit 6, c1+c2 use 3+3=6. Next push should throw.
+        BOOST_CHECK_THROW(c1.push_back(99), std::bad_alloc);
+    }
+
+    BOOST_AUTO_TEST_CASE(expandable_pop_front_and_clear)
+    {
+        using Alloc = MyMapAllocator<int, policy::Expandable<2>>;
+        MyContainer<int, Alloc> c;
+
+        for (int i = 0; i < 5; ++i)
+            c.push_back(i);
+
+        c.pop_front();
+        c.pop_front();
+        BOOST_CHECK_EQUAL(c.size(), 3u);
+        BOOST_CHECK_EQUAL(*c.begin(), 2);
+
+        c.clear();
+        BOOST_CHECK(c.empty());
+    }
 
 BOOST_AUTO_TEST_SUITE_END()

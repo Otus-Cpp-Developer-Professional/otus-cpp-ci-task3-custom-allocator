@@ -51,41 +51,24 @@ jobs:
           echo "=== build directory ==="
           ls -lah build
 
-      - name: Find deb package
-        run: |
-          DEB_PATH="$(find build -name '*.deb' | head -n 1)"
-          echo "DEB_PATH=$DEB_PATH" >> $GITHUB_ENV
-          echo "Found deb: $DEB_PATH"
-
       - name: Generate Doxygen documentation
         run: |
           doxygen Doxyfile
 
       - name: Deploy Doxygen to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
           publish_dir: docs/html
           force_orphan: true
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create Release and upload deb package
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.run_number }}
-          release_name: Release ${{ github.run_number }}
+          name: Release ${{ github.run_number }}
+          files: build/*.deb
           draft: false
           prerelease: false
-
-      - name: Upload deb package
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ${{ env.DEB_PATH }}
-          asset_name: allocator-${{ github.run_number }}.deb
-          asset_content_type: application/vnd.debian.binary-package

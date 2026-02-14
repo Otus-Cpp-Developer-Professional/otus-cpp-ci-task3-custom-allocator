@@ -4,6 +4,7 @@
 #include <iterator>
 #include <cstddef>
 #include <utility>
+#include <cassert>
 
 /**
  * @brief Singly-linked container with allocator support
@@ -32,37 +33,33 @@
 
 template<typename T, typename Allocator = std::allocator<T>>
 class MyContainer {
+
 private:
-    /**
-     * @brief Internal node of the singly-linked list
-     *
-     * Stores the value and a pointer to the next node.
-     */
-    struct Node {
-        T value;
-        Node* next;
 
-        Node() = default;
-
-        template<typename... Args>
-        explicit Node(Node* n, Args&&... args)
-                : value(std::forward<Args>(args)...), next(n) {}
-    };
-
+    struct Node;
 
     using allocator_traits_t = std::allocator_traits<Allocator>;
 
-    /**
-     * @brief Allocator rebound to Node type
-     *
-     * Required to allocate memory for internal nodes.
-     */
     template<typename U>
     using rebind_alloc_t =
             typename allocator_traits_t::template rebind_alloc<U>;
 
     using node_allocator_t = rebind_alloc_t<Node>;
     using node_traits_t    = std::allocator_traits<node_allocator_t>;
+    using node_pointer     = typename node_traits_t::pointer;
+    using node_ptr_traits  = std::pointer_traits<node_pointer>;
+
+    struct Node {
+        T value;
+        node_pointer next;
+
+        Node() = default;
+
+        template<typename... Args>
+        explicit Node(node_pointer n, Args&&... args)
+                : value(std::forward<Args>(args)...), next(n) {}
+    };
+
 
 public:
     /**
@@ -72,7 +69,7 @@ public:
      * Models a standard forward iterator.
      */
     class iterator {
-        Node* cur_ = nullptr;
+        node_pointer cur_ = nullptr;
 
     public:
         using iterator_category = std::forward_iterator_tag;
@@ -82,7 +79,7 @@ public:
         using reference         = T&;
 
         iterator() = default;
-        explicit iterator(Node* p) : cur_(p) {}
+        explicit iterator(node_pointer p) : cur_(p) {}
 
         reference operator*() const noexcept {
             return cur_->value;
@@ -120,7 +117,10 @@ public:
     explicit MyContainer(const Allocator& alloc = Allocator{})
             : node_alloc_(alloc)
     {
-        sentinel_.next = &sentinel_;
+        sentinel_ptr_ = node_ptr_traits::pointer_to(sentinel_);
+        std::to_address(sentinel_ptr_)->next = sentinel_ptr_;
+
+        head_ = tail_ = sentinel_ptr_;
     }
 
     /**
@@ -134,11 +134,11 @@ public:
     iterator begin() noexcept { return iterator(head_); }
 
     /// Returns iterator past the last element
-    iterator end() noexcept { return iterator(&sentinel_); }
+    iterator end() noexcept { return iterator(sentinel_ptr_); }
 
     /// Checks whether the container is empty
     [[nodiscard]] bool empty() const noexcept {
-        return head_ == &sentinel_;
+        return head_ == sentinel_ptr_;
     }
 
 
@@ -153,13 +153,13 @@ public:
      * @param value Value to insert
      */
     void push_front(const T& value) {
-        Node* n = create_node(value);
+        node_pointer n = create_node(value);
 
         if (empty()) {
-            n->next =&sentinel_;
+            std::to_address(n)->next = sentinel_ptr_;
             head_ = tail_ = n;
         } else {
-            n->next = head_;
+            std::to_address(n)->next = head_;
             head_ = n;
         }
         ++size_;
@@ -171,12 +171,13 @@ public:
      * @param value Value to insert
      */
     void push_back(const T& value) {
-        Node* n = create_node(value);
-        n->next = &sentinel_;
+        node_pointer n = create_node(value);
+        std::to_address(n)->next = sentinel_ptr_;
+
         if (empty()) {
             head_ = tail_ = n;
         } else {
-            tail_->next = n;
+            std::to_address(tail_)->next = n;
             tail_ = n;
         }
         ++size_;
@@ -191,11 +192,11 @@ public:
         if (empty())
             return;
 
-        Node* old = head_;
-        head_ = head_->next;
+        node_pointer old = head_;
+        head_ = std::to_address(head_)->next;
 
-        if (head_ == &sentinel_)
-            tail_ = &sentinel_;
+        if (head_ == sentinel_ptr_)
+            tail_ = sentinel_ptr_;
 
         destroy_node(old);
         --size_;
@@ -207,6 +208,148 @@ public:
     void clear() noexcept {
         while (!empty()) {
             pop_front();
+        }
+    }
+
+    MyContainer(const MyContainer& other)
+            : node_alloc_(node_traits_t::select_on_container_copy_construction(other.node_alloc_))
+    {
+        sentinel_ptr_ = node_ptr_traits::pointer_to(sentinel_);
+        std::to_address(sentinel_ptr_)->next = sentinel_ptr_;
+
+        head_ = tail_ = sentinel_ptr_;
+        size_ = 0;
+
+        for (auto it = other.begin(); it != other.end(); ++it) {
+            push_back(*it);
+        }
+    }
+
+    MyContainer(MyContainer&& other) noexcept
+            : node_alloc_(std::move(other.node_alloc_))
+    {
+        sentinel_ptr_ = node_ptr_traits::pointer_to(sentinel_);
+        std::to_address(sentinel_ptr_)->next = sentinel_ptr_;
+
+        if (node_alloc_ == other.node_alloc_) {
+            head_ = other.head_;
+            tail_ = other.tail_;
+            size_ = other.size_;
+
+            other.head_ = other.tail_ = other.sentinel_ptr_;
+            other.size_ = 0;
+        } else {
+            head_ = tail_ = sentinel_ptr_;
+            size_ = 0;
+
+            for (auto& v : other)
+                push_back(std::move(v));
+
+            other.clear();
+        }
+    }
+
+    MyContainer& operator=(MyContainer&& other) noexcept(
+    node_traits_t::propagate_on_container_move_assignment::value ||
+            node_traits_t::is_always_equal::value)
+    {
+        if (this == &other)
+            return *this;
+
+        clear();
+
+        if constexpr (node_traits_t::propagate_on_container_move_assignment::value) {
+            node_alloc_ = std::move(other.node_alloc_);
+
+            head_ = other.head_;
+            tail_ = other.tail_;
+            size_ = other.size_;
+
+            other.head_ = other.tail_ = other.sentinel_ptr_;
+            other.size_ = 0;
+        }
+        else {
+            if (node_alloc_ == other.node_alloc_) {
+
+                head_ = other.head_;
+                tail_ = other.tail_;
+                size_ = other.size_;
+
+                other.head_ = other.tail_ = other.sentinel_ptr_;
+                other.size_ = 0;
+            }
+            else {
+                for (auto& v : other)
+                    push_back(std::move(v));
+
+                other.clear();
+            }
+        }
+
+        return *this;
+    }
+
+    MyContainer& operator=(const MyContainer& other)
+    {
+        if (this == &other)
+            return *this;
+
+        if constexpr (node_traits_t::propagate_on_container_copy_assignment::value) {
+
+            clear();
+            node_alloc_ = other.node_alloc_;
+
+            for (const auto& v : other)
+                push_back(v);
+        }
+        else {
+
+            if (node_alloc_ == other.node_alloc_) {
+
+                clear();
+                for (const auto& v : other)
+                    push_back(v);
+            }
+            else {
+
+                MyContainer tmp(other);
+                swap(tmp);
+            }
+        }
+
+        return *this;
+    }
+
+
+    void swap(MyContainer& other) noexcept(
+    node_traits_t::propagate_on_container_swap::value ||
+    node_traits_t::is_always_equal::value)
+    {
+        using traits = node_traits_t;
+
+        if (this == &other)
+            return;
+
+        if constexpr (traits::propagate_on_container_swap::value) {
+
+            std::swap(node_alloc_, other.node_alloc_);
+            std::swap(head_, other.head_);
+            std::swap(tail_, other.tail_);
+            std::swap(size_, other.size_);
+        }
+        else {
+
+            if (node_alloc_ == other.node_alloc_) {
+
+                std::swap(head_, other.head_);
+                std::swap(tail_, other.tail_);
+                std::swap(size_, other.size_);
+            }
+            else {
+                // по стандарту это UB
+                // можно добавить assert
+                assert(false && "Swapping containers with unequal allocators is undefined");
+            }
         }
     }
 
@@ -223,13 +366,14 @@ private:
      * @throws Propagates exceptions from allocation or construction
      */
     template<typename... Args>
-    Node* create_node(Args&&... args) {
-        Node* p = node_traits_t::allocate(node_alloc_, 1);
+    node_pointer create_node(Args&&... args) {
+        node_pointer p = node_traits_t::allocate(node_alloc_, 1);
+        Node* raw = std::to_address(p);
         try {
-            node_traits_t::construct(node_alloc_, p, nullptr, args...);
+            node_traits_t::construct(node_alloc_, raw, node_pointer{}, args...);
             p->next = nullptr;
         } catch (...) {
-            node_traits_t::deallocate(node_alloc_, p, 1);
+            node_traits_t::deallocate(node_alloc_, raw, 1);
             throw;
         }
         return p;
@@ -240,8 +384,9 @@ private:
      *
      * @param p Node to destroy
      */
-    void destroy_node(Node* p) noexcept {
-        node_traits_t::destroy(node_alloc_, std::addressof(p->value));
+    void destroy_node(node_pointer p) noexcept {
+        Node* raw = std::to_address(p);
+        node_traits_t::destroy(node_alloc_, raw);
         node_traits_t::deallocate(node_alloc_, p, 1);
     }
 
@@ -249,9 +394,10 @@ private:
 
     node_allocator_t node_alloc_;
     Node sentinel_{};
+    node_pointer sentinel_ptr_{};
 
-    Node* head_ = &sentinel_;
-    Node* tail_ = &sentinel_;
+    node_pointer head_{};
+    node_pointer tail_{};
 
     std::size_t size_ = 0;
 };
